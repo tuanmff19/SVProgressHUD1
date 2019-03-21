@@ -42,6 +42,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 @property (nonatomic, strong) UIVisualEffectView *hudView;
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UIImageView *imageView;
+@property (nonatomic, strong) UIView *customViewContainer;
 
 @property (nonatomic, strong) UIView *indefiniteAnimatedView;
 @property (nonatomic, strong) SVProgressAnimatedView *ringView;
@@ -164,6 +165,26 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     [self sharedView].errorImage = image;
 }
 
++ (void)setCustomIndefinitedAnimationView:(UIView *)view {
+	[self sharedView].customIndefinitedAnimationView = view;
+}
+
++ (void)setCustomProgressAnimationView:(UIView *)view {
+	[self sharedView].customProgressAnimationView = view;
+}
+
++ (void)setCustomInfoView:(UIView *)view {
+	[self sharedView].customInfoView = view;
+}
+
++ (void)setCustomSuccessView:(UIView *)view {
+	[self sharedView].customSuccessView = view;
+}
+
++ (void)setCustomErrorView:(UIView *)view {
+	[self sharedView].customErrorView = view;
+}
+
 + (void)setViewForExtension:(UIView*)view {
     [self sharedView].viewForExtension = view;
 }
@@ -232,7 +253,13 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 }
 
 + (void)showProgress:(float)progress status:(NSString*)status {
-    [[self sharedView] showProgress:progress status:status];
+	if (progress >= 0 && [self sharedView].customProgressAnimationView) {
+		[[self sharedView] showCustomView:[self sharedView].customProgressAnimationView status:status duration:DBL_MAX];
+	} else if (progress < 0 && [self sharedView].customIndefinitedAnimationView) {
+		[[self sharedView] showCustomView:[self sharedView].customIndefinitedAnimationView status:status duration:DBL_MAX];
+	} else {
+    	[[self sharedView] showProgress:progress status:status];
+	}
 }
 
 + (void)showProgress:(float)progress status:(NSString*)status maskType:(SVProgressHUDMaskType)maskType {
@@ -246,7 +273,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 #pragma mark - Show, then automatically dismiss methods
 
 + (void)showInfoWithStatus:(NSString*)status {
-    [self showImage:[self sharedView].infoImage status:status];
+	if ([self sharedView].customInfoView) {
+		[self showCustomView:[self sharedView].customInfoView status:status];
+	} else {
+    	[self showImage:[self sharedView].infoImage status:status];
+	}
     
 #if TARGET_OS_IOS && __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
     if (@available(iOS 10.0, *)) {
@@ -265,7 +296,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 }
 
 + (void)showSuccessWithStatus:(NSString*)status {
-    [self showImage:[self sharedView].successImage status:status];
+	if ([self sharedView].customSuccessView) {
+		[self showCustomView:[self sharedView].customSuccessView status:status];
+	} else {
+    	[self showImage:[self sharedView].successImage status:status];
+	}
 
 #if TARGET_OS_IOS && __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
     if (@available(iOS 10, *)) {
@@ -292,7 +327,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 }
 
 + (void)showErrorWithStatus:(NSString*)status {
-    [self showImage:[self sharedView].errorImage status:status];
+	if ([self sharedView].customErrorView) {
+		[self showCustomView:[self sharedView].customErrorView status:status];
+	} else {
+		[self showImage:[self sharedView].errorImage status:status];
+	}
     
 #if TARGET_OS_IOS && __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
     if (@available(iOS 10.0, *)) {
@@ -328,6 +367,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     [self setDefaultMaskType:maskType];
     [self showImage:image status:status];
     [self setDefaultMaskType:existingMaskType];
+}
+
++ (void)showCustomView:(UIView *)view status:(NSString *)status {
+	NSTimeInterval displayInterval = [self displayDurationForString:status];
+	[[self sharedView] showCustomView:view status:status duration:displayInterval];
 }
 
 
@@ -381,6 +425,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
         
         self.backgroundView.alpha = 0.0f;
         self.imageView.alpha = 0.0f;
+		self.customViewContainer.alpha = 0.0f;
         self.statusLabel.alpha = 0.0f;
         self.indefiniteAnimatedView.alpha = 0.0f;
         self.ringView.alpha = self.backgroundRingView.alpha = 0.0f;
@@ -437,7 +482,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 - (void)updateHUDFrame {
     // Check if an image or progress ring is displayed
     BOOL imageUsed = (self.imageView.image) && !(self.imageView.hidden);
-    BOOL progressUsed = self.imageView.hidden;
+    BOOL progressUsed = self.imageView.hidden && self.customViewContainer.hidden;
+	BOOL customViewUsed = (self.customViewContainer.subviews.firstObject) && !(self.customViewContainer.hidden);
     
     // Calculate size of string
     CGRect labelRect = CGRectZero;
@@ -462,18 +508,24 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     
     CGFloat contentWidth = 0.0f;
     CGFloat contentHeight = 0.0f;
-    
-    if(imageUsed || progressUsed) {
-        contentWidth = CGRectGetWidth(imageUsed ? self.imageView.frame : self.indefiniteAnimatedView.frame);
-        contentHeight = CGRectGetHeight(imageUsed ? self.imageView.frame : self.indefiniteAnimatedView.frame);
-    }
+	
+	if (imageUsed) {
+		contentWidth = CGRectGetWidth(self.imageView.frame);
+		contentHeight = CGRectGetHeight(self.imageView.frame);
+	} else if (progressUsed) {
+		contentWidth = CGRectGetWidth(self.indefiniteAnimatedView.frame);
+		contentHeight = CGRectGetHeight(self.indefiniteAnimatedView.frame);
+	} else if (customViewUsed) {
+		contentWidth = CGRectGetWidth(self.customViewContainer.subviews.firstObject.frame);
+		contentHeight = CGRectGetHeight(self.customViewContainer.subviews.firstObject.frame);
+	}
     
     // |-spacing-content-spacing-|
     hudWidth = SVProgressHUDHorizontalSpacing + MAX(labelWidth, contentWidth) + SVProgressHUDHorizontalSpacing;
     
     // |-spacing-content-(labelSpacing-label-)spacing-|
     hudHeight = SVProgressHUDVerticalSpacing + labelHeight + contentHeight + SVProgressHUDVerticalSpacing;
-    if(self.statusLabel.text && (imageUsed || progressUsed)){
+    if(self.statusLabel.text && (imageUsed || progressUsed || customViewUsed)){
         // Add spacing if both content and label are used
         hudHeight += SVProgressHUDLabelSpacing;
     }
@@ -498,13 +550,19 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
         self.backgroundRingView.center = self.ringView.center = CGPointMake(CGRectGetMidX(self.hudView.bounds), centerY);
     }
     self.imageView.center = CGPointMake(CGRectGetMidX(self.hudView.bounds), centerY);
-
+	self.customViewContainer.center = CGPointMake(CGRectGetMidX(self.hudView.bounds), centerY);
+	
     // Label
-    if(imageUsed || progressUsed) {
-        centerY = CGRectGetMaxY(imageUsed ? self.imageView.frame : self.indefiniteAnimatedView.frame) + SVProgressHUDLabelSpacing + labelHeight / 2.0f;
-    } else {
-        centerY = CGRectGetMidY(self.hudView.bounds);
-    }
+	if (imageUsed) {
+		 centerY = CGRectGetMaxY(self.imageView.frame) + SVProgressHUDLabelSpacing + labelHeight / 2.0f;
+	} else if (progressUsed) {
+		 centerY = CGRectGetMaxY(self.indefiniteAnimatedView.frame) + SVProgressHUDLabelSpacing + labelHeight / 2.0f;
+	} else if (customViewUsed) {
+		centerY = CGRectGetMaxY(self.customViewContainer.frame) + SVProgressHUDLabelSpacing + labelHeight / 2.0f;
+	} else {
+		centerY = CGRectGetMidY(self.hudView.bounds);
+	}
+	
     self.statusLabel.frame = labelRect;
     self.statusLabel.center = CGPointMake(CGRectGetMidX(self.hudView.bounds), centerY);
     
@@ -761,6 +819,10 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
             // Reset imageView and fadeout timer if an image is currently displayed
             strongSelf.imageView.hidden = YES;
             strongSelf.imageView.image = nil;
+			
+			// Reset customViewContainer and remove its view
+			strongSelf.customViewContainer.hidden = YES;
+			[strongSelf.customViewContainer.subviews.firstObject removeFromSuperview];
             
             // Update text and set progress to the given value
             strongSelf.statusLabel.hidden = status.length == 0;
@@ -838,7 +900,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
             strongSelf.progress = SVProgressHUDUndefinedProgress;
             [strongSelf cancelRingLayerAnimation];
             [strongSelf cancelIndefiniteAnimatedViewAnimation];
-            
+			
+			// Reset customViewContainer and remove its view
+			strongSelf.customViewContainer.hidden = YES;
+			[strongSelf.customViewContainer.subviews.firstObject removeFromSuperview];
+			
             // Update imageView
             if (self.shouldTintImages) {
                 if (image.renderingMode != UIImageRenderingModeAlwaysTemplate) {
@@ -864,6 +930,50 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
             }
         }
     }];
+}
+
+- (void)showCustomView:(UIView*)view status:(NSString*)status duration:(NSTimeInterval)duration {
+	__weak SVProgressHUD *weakSelf = self;
+	[[NSOperationQueue mainQueue] addOperationWithBlock:^{
+		__strong SVProgressHUD *strongSelf = weakSelf;
+		if(strongSelf){
+			// Stop timer
+			strongSelf.fadeOutTimer = nil;
+			strongSelf.graceTimer = nil;
+			
+			// Update / Check view hierarchy to ensure the HUD is visible
+			[strongSelf updateViewHierarchy];
+			
+			// Reset progress and cancel any running animation
+			strongSelf.progress = SVProgressHUDUndefinedProgress;
+			[strongSelf cancelRingLayerAnimation];
+			[strongSelf cancelIndefiniteAnimatedViewAnimation];
+			
+			// Reset imageView and fadeout timer if an image is currently displayed
+			strongSelf.imageView.hidden = YES;
+			strongSelf.imageView.image = nil;
+			
+			// Update imageView
+			strongSelf.customViewContainer.hidden = NO;
+			[strongSelf.customViewContainer.subviews.firstObject removeFromSuperview];
+			[strongSelf.customViewContainer addSubview:view];
+			strongSelf.customViewContainer.frame = CGRectMake(0, 0, CGRectGetWidth(view.frame),  CGRectGetHeight(view.frame));
+			view.frame = CGRectMake(0, 0, CGRectGetWidth(view.frame),  CGRectGetHeight(view.frame));
+			
+			// Update text
+			strongSelf.statusLabel.hidden = status.length == 0;
+			strongSelf.statusLabel.text = status;
+			
+			// Fade in delayed if a grace time is set
+			// An image will be dismissed automatically. Thus pass the duration as userInfo.
+			if (self.graceTimeInterval > 0.0 && self.backgroundView.alpha == 0.0f) {
+				strongSelf.graceTimer = [NSTimer timerWithTimeInterval:self.graceTimeInterval target:strongSelf selector:@selector(fadeIn:) userInfo:@(duration) repeats:NO];
+				[[NSRunLoop mainRunLoop] addTimer:strongSelf.graceTimer forMode:NSRunLoopCommonModes];
+			} else {
+				[strongSelf fadeIn:@(duration)];
+			}
+		}
+	}];
 }
 
 - (void)fadeIn:(id)data {
@@ -1302,6 +1412,21 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     return _imageView;
 }
 
+- (UIView *)customViewContainer {
+	if(_customViewContainer && _customViewContainer.subviews.count == 0) {
+		[_customViewContainer removeFromSuperview];
+	}
+	
+	if(!_customViewContainer) {
+		_customViewContainer = [[UIView alloc] initWithFrame:CGRectZero];
+	}
+	
+	if(!_customViewContainer.superview) {
+		[self.hudView.contentView addSubview:_customViewContainer];
+	}
+		
+	return _customViewContainer;
+}
 
 #pragma mark - Helper
     
@@ -1375,6 +1500,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     self.backgroundView.alpha = 1.0f;
     
     self.imageView.alpha = 1.0f;
+	self.customViewContainer.alpha = 1.0f;
     self.statusLabel.alpha = 1.0f;
     self.indefiniteAnimatedView.alpha = 1.0f;
     self.ringView.alpha = self.backgroundRingView.alpha = 1.0f;
@@ -1394,7 +1520,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     self.backgroundView.alpha = 0.0f;
     
     self.imageView.alpha = 0.0f;
-    self.statusLabel.alpha = 0.0f;
+	self.customViewContainer.alpha = 0.0f;
+	self.statusLabel.alpha = 0.0f;
     self.indefiniteAnimatedView.alpha = 0.0f;
     self.ringView.alpha = self.backgroundRingView.alpha = 0.0f;
 }
@@ -1482,6 +1609,26 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 
 - (void)setErrorImage:(UIImage*)image {
     if (!_isInitializing) _errorImage = image;
+}
+
+- (void)setCustomIndefinitedAnimationView:(UIView *)view {
+	if (!_isInitializing) _customIndefinitedAnimationView = view;
+}
+
+- (void)setCustomProgressAnimationView:(UIView *)view {
+	if (!_isInitializing) _customProgressAnimationView = view;
+}
+
+- (void)setCustomInfoView:(UIView *)view {
+	if (!_isInitializing) _customInfoView = view;
+}
+
+- (void)setCustomSuccessView:(UIView *)view {
+	if (!_isInitializing) _customSuccessView = view;
+}
+
+- (void)setCustomErrorView:(UIView *)view {
+	if (!_isInitializing) _customErrorView = view;
 }
 
 - (void)setViewForExtension:(UIView*)view {
