@@ -13,7 +13,7 @@
 #import "SVIndefiniteAnimatedView.h"
 #import "SVProgressAnimatedView.h"
 #import "SVRadialGradientLayer.h"
-#import "SVCustomHUDView.h"
+#import "SVCustomViewContainer.h"
 
 NSString * const SVProgressHUDDidReceiveTouchEventNotification = @"SVProgressHUDDidReceiveTouchEventNotification";
 NSString * const SVProgressHUDDidTouchDownInsideNotification = @"SVProgressHUDDidTouchDownInsideNotification";
@@ -43,7 +43,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 @property (nonatomic, strong) UIVisualEffectView *hudView;
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UIImageView *imageView;
-@property (nonatomic, strong) UIView *customViewContainer;
+@property (nonatomic, strong) SVCustomViewContainer *customViewContainer;
 
 @property (nonatomic, strong) UIView *indefiniteAnimatedView;
 @property (nonatomic, strong) SVProgressAnimatedView *ringView;
@@ -255,11 +255,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 
 + (void)showProgress:(float)progress status:(NSString*)status {
 	if (progress >= 0 && [self sharedView].customProgressAnimationView) {
-		UIView * progressView = [self sharedView].customProgressAnimationView;
-		[[self sharedView] showCustomView:progressView status:status duration:DBL_MAX];
-		if ([progressView conformsToProtocol:@protocol(SVCustomHUDView)] && [progressView respondsToSelector:@selector(setHUDProgress:)]) {
-			[((id<SVCustomHUDView>)progressView) setHUDProgress:progress];
-		}
+		[[self sharedView] showCustomView:[self sharedView].customProgressAnimationView status:status duration:DBL_MAX];
+		[[self sharedView].customViewContainer setProgress:progress];
 	} else if (progress < 0 && [self sharedView].customIndefinitedAnimationView) {
 		[[self sharedView] showCustomView:[self sharedView].customIndefinitedAnimationView status:status duration:DBL_MAX];
 	} else {
@@ -488,7 +485,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     // Check if an image or progress ring is displayed
     BOOL imageUsed = (self.imageView.image) && !(self.imageView.hidden);
     BOOL progressUsed = self.imageView.hidden && self.customViewContainer.hidden;
-	BOOL customViewUsed = (self.customViewContainer.subviews.firstObject) && !(self.customViewContainer.hidden);
+	BOOL customViewUsed = (self.customViewContainer.contentView) && !(self.customViewContainer.hidden);
     
     // Calculate size of string
     CGRect labelRect = CGRectZero;
@@ -521,8 +518,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 		contentWidth = CGRectGetWidth(self.indefiniteAnimatedView.frame);
 		contentHeight = CGRectGetHeight(self.indefiniteAnimatedView.frame);
 	} else if (customViewUsed) {
-		contentWidth = CGRectGetWidth(self.customViewContainer.subviews.firstObject.frame);
-		contentHeight = CGRectGetHeight(self.customViewContainer.subviews.firstObject.frame);
+		contentWidth = CGRectGetWidth(self.customViewContainer.frame);
+		contentHeight = CGRectGetHeight(self.customViewContainer.frame);
 	}
     
     // |-spacing-content-spacing-|
@@ -827,7 +824,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 			
 			// Reset customViewContainer and remove its view
 			strongSelf.customViewContainer.hidden = YES;
-			[strongSelf resetCurrentCustomView];
+			strongSelf.customViewContainer.contentView = nil;
             
             // Update text and set progress to the given value
             strongSelf.statusLabel.hidden = status.length == 0;
@@ -908,7 +905,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 			
 			// Reset customViewContainer and remove its view
 			strongSelf.customViewContainer.hidden = YES;
-			[strongSelf resetCurrentCustomView];
+			strongSelf.customViewContainer.contentView = nil;
 			
             // Update imageView
             if (self.shouldTintImages) {
@@ -960,17 +957,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 			
 			// Update imageView
 			strongSelf.customViewContainer.hidden = NO;
-			UIView *currentCustomView = strongSelf.customViewContainer.subviews.firstObject;
-			if (currentCustomView != view) {
-				[strongSelf resetCurrentCustomView];
-				[strongSelf.customViewContainer addSubview:view];
-				if ([view conformsToProtocol:@protocol(SVCustomHUDView)] && [view respondsToSelector:@selector(startHUDAnimationWithDuration:)]) {
-					[((id<SVCustomHUDView>)view) startHUDAnimationWithDuration:duration];
-				}
-			}
-			
-			strongSelf.customViewContainer.frame = CGRectMake(0, 0, CGRectGetWidth(view.frame),  CGRectGetHeight(view.frame));
-			view.frame = CGRectMake(0, 0, CGRectGetWidth(view.frame),  CGRectGetHeight(view.frame));
+			[strongSelf.customViewContainer showContentView:view hudDuration:duration];
 			
 			// Update text
 			strongSelf.statusLabel.hidden = status.length == 0;
@@ -1141,8 +1128,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
                     [rootController setNeedsStatusBarAppearanceUpdate];
 #endif
 					
-					// Tell the custom view, if any, to stops its animation
-					[self resetCurrentCustomView];
+					// Reset the custom view container's content view
+					self.customViewContainer.contentView = nil;
 					
                     // Run an (optional) completionHandler
                     if (completion) {
@@ -1433,7 +1420,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 	}
 	
 	if(!_customViewContainer) {
-		_customViewContainer = [[UIView alloc] initWithFrame:CGRectZero];
+		_customViewContainer = [[SVCustomViewContainer alloc] initWithFrame:CGRectZero];
 	}
 	
 	if(!_customViewContainer.superview) {
@@ -1554,14 +1541,6 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 	return _hapticGenerator;
 }
 #endif
-
-- (void) resetCurrentCustomView {
-	UIView *customView = self.customViewContainer.isHidden ? nil : self.customViewContainer.subviews.firstObject;
-	if ([customView conformsToProtocol:@protocol(SVCustomHUDView)] && [customView respondsToSelector:@selector(startHUDAnimationWithDuration:)]) {
-		[((id<SVCustomHUDView>)customView) stopHUDAnimation];
-	}
-	[customView removeFromSuperview];
-}
 
 #pragma mark - UIAppearance Setters
 
