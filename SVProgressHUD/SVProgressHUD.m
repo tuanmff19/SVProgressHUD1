@@ -13,6 +13,7 @@
 #import "SVIndefiniteAnimatedView.h"
 #import "SVProgressAnimatedView.h"
 #import "SVRadialGradientLayer.h"
+#import "SVCustomHUDView.h"
 
 NSString * const SVProgressHUDDidReceiveTouchEventNotification = @"SVProgressHUDDidReceiveTouchEventNotification";
 NSString * const SVProgressHUDDidTouchDownInsideNotification = @"SVProgressHUDDidTouchDownInsideNotification";
@@ -254,7 +255,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 
 + (void)showProgress:(float)progress status:(NSString*)status {
 	if (progress >= 0 && [self sharedView].customProgressAnimationView) {
-		[[self sharedView] showCustomView:[self sharedView].customProgressAnimationView status:status duration:DBL_MAX];
+		UIView * progressView = [self sharedView].customProgressAnimationView;
+		[[self sharedView] showCustomView:progressView status:status duration:DBL_MAX];
+		if ([progressView conformsToProtocol:@protocol(SVCustomHUDView)] && [progressView respondsToSelector:@selector(setHUDProgress:)]) {
+			[((id<SVCustomHUDView>)progressView) setHUDProgress:progress];
+		}
 	} else if (progress < 0 && [self sharedView].customIndefinitedAnimationView) {
 		[[self sharedView] showCustomView:[self sharedView].customIndefinitedAnimationView status:status duration:DBL_MAX];
 	} else {
@@ -822,7 +827,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 			
 			// Reset customViewContainer and remove its view
 			strongSelf.customViewContainer.hidden = YES;
-			[strongSelf.customViewContainer.subviews.firstObject removeFromSuperview];
+			[strongSelf resetCurrentCustomView];
             
             // Update text and set progress to the given value
             strongSelf.statusLabel.hidden = status.length == 0;
@@ -903,7 +908,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 			
 			// Reset customViewContainer and remove its view
 			strongSelf.customViewContainer.hidden = YES;
-			[strongSelf.customViewContainer.subviews.firstObject removeFromSuperview];
+			[strongSelf resetCurrentCustomView];
 			
             // Update imageView
             if (self.shouldTintImages) {
@@ -955,8 +960,15 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 			
 			// Update imageView
 			strongSelf.customViewContainer.hidden = NO;
-			[strongSelf.customViewContainer.subviews.firstObject removeFromSuperview];
-			[strongSelf.customViewContainer addSubview:view];
+			UIView *currentCustomView = strongSelf.customViewContainer.subviews.firstObject;
+			if (currentCustomView != view) {
+				[strongSelf resetCurrentCustomView];
+				[strongSelf.customViewContainer addSubview:view];
+				if ([view conformsToProtocol:@protocol(SVCustomHUDView)] && [view respondsToSelector:@selector(startHUDAnimationWithDuration:)]) {
+					[((id<SVCustomHUDView>)view) startHUDAnimationWithDuration:duration];
+				}
+			}
+			
 			strongSelf.customViewContainer.frame = CGRectMake(0, 0, CGRectGetWidth(view.frame),  CGRectGetHeight(view.frame));
 			view.frame = CGRectMake(0, 0, CGRectGetWidth(view.frame),  CGRectGetHeight(view.frame));
 			
@@ -1128,7 +1140,10 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
                     UIViewController *rootController = [[UIApplication sharedApplication] keyWindow].rootViewController;
                     [rootController setNeedsStatusBarAppearanceUpdate];
 #endif
-                    
+					
+					// Tell the custom view, if any, to stops its animation
+					[self resetCurrentCustomView];
+					
                     // Run an (optional) completionHandler
                     if (completion) {
                         completion();
@@ -1540,7 +1555,14 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 }
 #endif
 
-    
+- (void) resetCurrentCustomView {
+	UIView *customView = self.customViewContainer.isHidden ? nil : self.customViewContainer.subviews.firstObject;
+	if ([customView conformsToProtocol:@protocol(SVCustomHUDView)] && [customView respondsToSelector:@selector(startHUDAnimationWithDuration:)]) {
+		[((id<SVCustomHUDView>)customView) stopHUDAnimation];
+	}
+	[customView removeFromSuperview];
+}
+
 #pragma mark - UIAppearance Setters
 
 - (void)setDefaultStyle:(SVProgressHUDStyle)style {
