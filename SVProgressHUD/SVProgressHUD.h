@@ -61,6 +61,11 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 @property (strong, nonatomic, nonnull) UIImage *infoImage UI_APPEARANCE_SELECTOR;           // default is the bundled info image provided by Freepik
 @property (strong, nonatomic, nonnull) UIImage *successImage UI_APPEARANCE_SELECTOR;        // default is the bundled success image provided by Freepik
 @property (strong, nonatomic, nonnull) UIImage *errorImage UI_APPEARANCE_SELECTOR;          // default is the bundled error image provided by Freepik
+@property (strong, nonatomic, nullable) UIView *customIndefinitedAnimationView;		    	// default is nil
+@property (strong, nonatomic, nullable) UIView *customProgressAnimationView;			    // default is nil
+@property (strong, nonatomic, nullable) UIView *customInfoView;						    	// default is nil
+@property (strong, nonatomic, nullable) UIView *customSuccessView;						    // default is nil
+@property (strong, nonatomic, nullable) UIView *customErrorView;						    // default is nil
 @property (strong, nonatomic, nonnull) UIView *viewForExtension UI_APPEARANCE_SELECTOR;     // default is nil, only used if #define SV_APP_EXTENSIONS is set
 @property (assign, nonatomic) NSTimeInterval graceTimeInterval;                             // default is 0 seconds
 @property (assign, nonatomic) NSTimeInterval minimumDismissTimeInterval;                    // default is 5.0 seconds
@@ -95,6 +100,11 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 + (void)setInfoImage:(nonnull UIImage*)image;                       // default is the bundled info image provided by Freepik
 + (void)setSuccessImage:(nonnull UIImage*)image;                    // default is the bundled success image provided by Freepik
 + (void)setErrorImage:(nonnull UIImage*)image;                      // default is the bundled error image provided by Freepik
++ (void)setCustomIndefinitedAnimationView:(nullable UIView*)view;   // default is nil
++ (void)setCustomProgressAnimationView:(nullable UIView*)view;		// default is nil
++ (void)setCustomInfoView:(nullable UIView*)view;                 	// default is nil
++ (void)setCustomSuccessView:(nullable UIView*)view;                // default is nil
++ (void)setCustomErrorView:(nullable UIView*)view;                 	// default is nil
 + (void)setViewForExtension:(nonnull UIView*)view;                  // default is nil, only used if #define SV_APP_EXTENSIONS is set
 + (void)setGraceTimeInterval:(NSTimeInterval)interval;              // default is 0 seconds
 + (void)setMinimumDismissTimeInterval:(NSTimeInterval)interval;     // default is 5.0 seconds
@@ -129,6 +139,9 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 // shows a image + status, use white PNGs with the imageViewSize (default is 28x28 pt)
 + (void)showImage:(nonnull UIImage*)image status:(nullable NSString*)status;
 + (void)showImage:(nonnull UIImage*)image status:(nullable NSString*)status maskType:(SVProgressHUDMaskType)maskType __attribute__((deprecated("Use showImage:status: and setDefaultMaskType: instead.")));
+
+// shows a view + status.
++ (void)showCustomView:(nonnull UIView*)view status:(nullable NSString*)status;
 
 + (void)setOffsetFromCenter:(UIOffset)offset;
 + (void)resetOffsetFromCenter;
