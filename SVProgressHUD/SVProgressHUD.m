@@ -376,6 +376,9 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 	[[self sharedView] showCustomView:view status:status duration:displayInterval];
 }
 
++ (void)showCustomView:(UIView *)view duration:(NSTimeInterval) displayInterval {
+	[[self sharedView] showCustomView:view status:nil duration:displayInterval];
+}
 
 #pragma mark - Dismiss Methods
 

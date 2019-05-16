@@ -142,6 +142,7 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 
 // shows a view + status.
 + (void)showCustomView:(nonnull UIView*)view status:(nullable NSString*)status;
++ (void)showCustomView:(nonnull UIView *)view duration:(NSTimeInterval) displayInterval;
 
 + (void)setOffsetFromCenter:(UIOffset)offset;
 + (void)resetOffsetFromCenter;
